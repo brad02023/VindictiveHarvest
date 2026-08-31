@@ -1,0 +1,124 @@
+[
+  {
+    "name": "GitHub",
+    "url": "https://github.com/{u}",
+    "hit_any": ["p-nickname", "itemprop=\"name\""],
+    "miss_any": ["Not Found"],
+    "miss_status": [404]
+  },
+  {
+    "name": "GitLab",
+    "url": "https://gitlab.com/{u}",
+    "miss_any": ["Sign in · GitLab", "That page doesn't exist"],
+    "miss_status": [404]
+  },
+  {
+    "name": "Reddit",
+    "url": "https://www.reddit.com/user/{u}/about.json",
+    "hit_any": ["\"kind\": \"t2\""],
+    "miss_status": [404]
+  },
+  {
+    "name": "Steam",
+    "url": "https://steamcommunity.com/id/{u}",
+    "hit_any": ["g_rgProfileData ="],
+    "miss_any": ["The specified profile could not be found", "Steam Community :: Error"]
+  },
+  {
+    "name": "Instagram",
+    "url": "https://www.instagram.com/{u}/",
+    "hit_any": ["\"profile_id\"", "profilePage_", "\"username\":\"{u}\""],
+    "miss_any": ["Sorry, this page isn't available", "\"routePath\":null"]
+  },
+  {
+    "name": "Facebook",
+    "url": "https://www.facebook.com/{u}",
+    "hit_any": ["fb://profile/", "\"userID\""],
+    "miss_any": ["This content isn't available right now"]
+  },
+  {
+    "name": "TikTok",
+    "url": "https://www.tiktok.com/@{u}",
+    "hit_any": ["\"uniqueId\":\"{u}\""],
+    "miss_any": ["Couldn't find this account"]
+  },
+  {
+    "name": "X",
+    "url": "https://x.com/{u}",
+    "hit_any": ["\"screen_name\":\"{u}\""],
+    "miss_any": ["This account doesn’t exist", "This account doesn't exist"]
+  },
+  {
+    "name": "Snapchat",
+    "url": "https://www.snapchat.com/add/{u}",
+    "hit_any": ["\"username\":\"{u}\""],
+    "miss_any": ["Sorry, we couldn't find"]
+  },
+  {
+    "name": "Telegram",
+    "url": "https://t.me/{u}",
+    "hit_any": ["tgme_page_title"],
+    "miss_any": ["If you have <strong>Telegram</strong>"]
+  },
+  {
+    "name": "Twitch",
+    "url": "https://www.twitch.tv/{u}",
+    "hit_any": ["isLiveBroadcast", "\"login\":\"{u}\""],
+    "miss_any": ["Sorry. Unless you’ve got a time machine"]
+  },
+  {
+    "name": "YouTube",
+    "url": "https://www.youtube.com/@{u}",
+    "hit_any": ["channelId", "og:type"],
+    "miss_any": ["This page isn't available"]
+  },
+  {
+    "name": "Pinterest",
+    "url": "https://www.pinterest.com/{u}/",
+    "hit_any": ["\"username\":\"{u}\""],
+    "miss_any": ["Sorry, we couldn't find that page"]
+  },
+  {
+    "name": "LinkedIn",
+    "url": "https://www.linkedin.com/in/{u}",
+    "hit_any": ["urn:li:member"],
+    "miss_any": ["This page doesn’t exist"]
+  },
+  {
+    "name": "Threads",
+    "url": "https://www.threads.net/@{u}",
+    "hit_any": ["\"username\":\"{u}\""],
+    "miss_any": ["Sorry, this page isn't available"]
+  },
+  {
+    "name": "Linktree",
+    "url": "https://linktr.ee/{u}",
+    "hit_any": ["\"username\""],
+    "miss_any": ["The page you’re looking for doesn’t exist"],
+    "parse_links": true
+  },
+  {
+    "name": "About.me",
+    "url": "https://about.me/{u}",
+    "miss_any": ["is not available"],
+    "parse_links": true
+  },
+  {
+    "name": "Roblox",
+    "url": "https://www.roblox.com/users/profile?username={u}",
+    "hit_any": ["data-profileuserid", "profile-header"],
+    "miss_any": ["Page cannot be found"]
+  },
+  {
+    "name": "Xbox",
+    "url": "https://xboxgamertag.com/search/{u}",
+    "hit_any": ["Gamerscore"],
+    "miss_any": ["Gamertag not found", "could not be found"]
+  },
+  {
+    "name": "Keybase",
+    "url": "https://keybase.io/{u}",
+    "miss_any": ["User not found"],
+    "miss_status": [404]
+  }
+]
