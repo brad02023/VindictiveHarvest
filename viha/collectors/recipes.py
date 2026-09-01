@@ -15,15 +15,16 @@ class RecipeCollector(Collector):
         log(f"Search recipes: {len(links)} public lookup URLs")
         facts: list[Fact] = []
         for label, url, section in links:
+            dest = section if section in {"property", "legal"} else "recipes"
             facts.append(
                 self.fact(
-                    predicate="recipe",
+                    predicate="property" if dest == "property" else "recipe",
                     value=label,
-                    section="recipes",
+                    section=dest,
                     confidence=0.3,
                     url=url,
                     publisher="Search recipe",
-                    extra={"kind": "recipe"},
+                    extra={"kind": "recipe", "topic": section, "lookup": True},
                     candidate=False,
                     note="Open in a browser - not fetched automatically",
                 )

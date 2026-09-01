@@ -27,6 +27,12 @@ def test_operator_username_is_strong():
     assert not handle_is_strong("adaexamplepublic", seed)
 
 
+def test_operator_username_with_slash_is_strong():
+    seed = Seed(username="rm -rf /my/brain")
+    assert handle_is_strong("rm -rf /my/brain", seed)
+    assert not handle_is_strong("rm-rfmybrain", seed)
+
+
 def test_name_smash_profiles_are_candidates():
     seed = Seed(full_name="Ada Lovelace")
     facts = mark_social_confidence(
@@ -50,6 +56,75 @@ def test_strong_handle_stays_confirmed_and_dedupes_platform():
     by_handle = {f.extra["handle"]: f for f in facts}
     assert by_handle["adalovelace13"].candidate is False
     assert by_handle["alovelace"].candidate is True
+
+
+def test_github_identity_fields_do_not_crash_confidence():
+    seed = Seed(username="adaexample")
+    profile = _fact("github", "adaexample", confidence=0.86)
+    aka = Fact(
+        predicate="aka",
+        value="Ada Example",
+        section="identity",
+        confidence=0.7,
+        source=Source(publisher="GitHub", url="https://github.com/adaexample"),
+        extra={"handle": "adaexample", "via": "github-profile"},
+        candidate=False,
+    )
+    loc = Fact(
+        predicate="location",
+        value="Austin, TX",
+        section="identity",
+        confidence=0.7,
+        source=Source(publisher="GitHub", url="https://github.com/adaexample"),
+        extra={"handle": "adaexample", "via": "github-profile"},
+        candidate=False,
+    )
+    mark_social_confidence([profile, aka, loc], seed)
+    assert profile.candidate is False
+    assert profile.confidence >= 0.7
+    assert aka.predicate == "aka"
+    assert aka.candidate is False
+    assert loc.candidate is False
+
+
+def test_display_name_github_stays_green_beside_exact_login():
+    seed = Seed(username="adaexample")
+    exact = _fact("github", "adaexample", confidence=0.86)
+    display = Fact(
+        predicate="username",
+        value="github:otherlogin",
+        section="social",
+        confidence=0.78,
+        source=Source(publisher="GitHub", url="https://github.com/otherlogin"),
+        extra={"platform": "github", "handle": "otherlogin", "via": "persona-search"},
+    )
+    mark_social_confidence([exact, display], seed)
+    assert exact.candidate is False
+    assert display.candidate is False
+    assert display.confidence >= 0.7
+
+
+def test_persona_search_via_is_confirmed():
+    seed = Seed(username="rm -rf /my/brain")
+    fact = Fact(
+        predicate="username",
+        value="steam:rm -rf /my/brain",
+        section="social",
+        confidence=0.76,
+        source=Source(publisher="Steam", url="https://steamcommunity.com/id/AdaExample"),
+        extra={"platform": "steam", "handle": "rm -rf /my/brain", "via": "persona-search"},
+    )
+    mark_social_confidence([fact], seed)
+    assert fact.candidate is False
+    assert fact.confidence >= 0.76
+
+
+def test_strong_handle_bumps_to_green():
+    seed = Seed(username="exacthandle")
+    fact = _fact("steam", "exacthandle", confidence=0.62)
+    mark_social_confidence([fact], seed)
+    assert fact.candidate is False
+    assert fact.confidence >= 0.7
 
 
 def test_name_in_text_requires_first_and_last():

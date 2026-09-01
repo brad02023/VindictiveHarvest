@@ -26,7 +26,7 @@ viha = "viha.cli:main"
 include = ["viha*"]
 
 [tool.setuptools.package-data]
-viha = ["data/*.json"]
+viha = ["data/*.json", "data/*.ico", "data/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

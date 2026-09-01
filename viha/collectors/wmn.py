@@ -7,9 +7,19 @@ from typing import Any
 
 from viha.collectors.base import Collector, LogFn
 from viha.collectors.social import handle_is_strong, hunt_handles, mark_social_confidence
-from viha.collectors.social_catalog import BROWSER_UA, page_is_hit
+from viha.collectors.social_catalog import (
+    BROWSER_UA,
+    dest_is_generic,
+    dest_is_search_dump,
+    page_is_hit,
+    page_says_missing,
+    url_still_names_user,
+    wmn_account_exists,
+)
 from viha.core.casefile import ensure_cases_dir
 from viha.core.models import Fact, Seed
+from viha.core.handles import path_seg, shape_handle, style_name_for
+from viha.core.normalize import handle_needles
 
 WMN_URL = "https://raw.githubusercontent.com/WebBreacher/WhatsMyName/main/wmn-data.json"
 KEEP_CATS = {"social", "gaming", "coding", "images", "video", "music", "blog", "hobby", "tech"}
@@ -51,7 +61,11 @@ class WhatsMyNameCollector(Collector):
         headers = {"User-Agent": BROWSER_UA}
 
         async def probe(handle: str, site: dict[str, Any]) -> Fact | None:
-            url = (site.get("uri_check") or "").replace("{account}", handle)
+            forms = shape_handle(handle, style_name_for(site.get("name") or ""))
+            account = forms[0] if forms else ""
+            if not account:
+                return None
+            url = (site.get("uri_check") or "").replace("{account}", path_seg(account))
             if not url:
                 return None
             async with sem:
@@ -59,26 +73,38 @@ class WhatsMyNameCollector(Collector):
                     r = await client.get(url, headers=headers, timeout=10.0, follow_redirects=True)
                 except Exception:
                     return None
-            pretty = (site.get("uri_pretty") or url).replace("{account}", handle)
-            fake = {
-                "hit_any": [site["m_string"]] if site.get("m_string") else [],
-                "miss_any": [site["e_string"]] if site.get("e_string") else [],
-                "miss_status": [site["e_code"]] if site.get("e_code") and site.get("e_code") != site.get("m_code") else [],
-            }
-            # Prefer WMN semantics: exist if m_code matches and m_string (if any) is present.
+            pretty = (site.get("uri_pretty") or url).replace("{account}", path_seg(account))
             body = r.text or ""
-            m_code = site.get("m_code")
-            m_string = site.get("m_string") or ""
-            e_string = site.get("e_string") or ""
-            if m_code is not None and r.status_code != m_code:
-                if not page_is_hit(fake, r.status_code, body, handle, str(r.url)):
-                    return None
-            if e_string and e_string.lower() in body.lower() and not (m_string and m_string.lower() in body.lower()):
+            dest = str(r.url)
+            if not wmn_account_exists(site, r.status_code, body):
                 return None
-            if m_string and m_string.lower() not in body.lower() and not fake["hit_any"]:
-                if handle.lower() not in body.lower() and handle.lower() not in str(r.url).lower():
-                    return None
-            if handle.lower() not in body.lower() and handle.lower() not in str(r.url).lower():
+            if page_says_missing(body):
+                return None
+            if dest_is_generic(dest) or dest_is_search_dump(dest, account):
+                return None
+            if not url_still_names_user(url, dest, account):
+                return None
+            catalog = {
+                "hit_any": [site["e_string"]] if site.get("e_string") else [],
+                "miss_any": [site["m_string"]] if site.get("m_string") else [],
+                "miss_status": (
+                    [site["m_code"]]
+                    if site.get("m_code") is not None and site.get("m_code") != site.get("e_code")
+                    else []
+                ),
+            }
+            jsonish = (body or "").lstrip().startswith(("{", "["))
+            if not jsonish and not page_is_hit(
+                catalog, r.status_code, body, account, dest, requested_url=url
+            ):
+                return None
+            needles = [n.lower() for n in handle_needles(account)]
+            blob = body.lower()
+            if (
+                not any(n in blob for n in needles)
+                and account.lower() not in url.lower()
+                and account.lower() not in dest.lower()
+            ):
                 return None
             name = site.get("name") or "site"
             return self.fact(
@@ -88,7 +114,7 @@ class WhatsMyNameCollector(Collector):
                 confidence=0.62,
                 url=pretty or str(r.url),
                 publisher=name,
-                extra={"platform": name.lower(), "handle": handle, "via": "wmn"},
+                extra={"platform": name.lower(), "handle": account, "supplied": handle, "via": "wmn"},
                 candidate=not handle_is_strong(handle, seed),
             )
 

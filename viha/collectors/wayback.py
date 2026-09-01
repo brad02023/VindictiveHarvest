@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from viha.collectors.base import Collector, LogFn
 from viha.core.models import Fact, Seed
+from viha.core.handles import path_seg, shape_handle
 from viha.core.normalize import email_local_part, split_usernames, username_candidates
 
 
@@ -21,16 +22,21 @@ class WaybackCollector(Collector):
             if not h or h in seen_h:
                 continue
             seen_h.add(h)
-            urls.extend(
-                [
-                    f"https://github.com/{h}",
-                    f"https://www.instagram.com/{h}/",
-                    f"https://twitter.com/{h}",
-                    f"https://x.com/{h}",
-                    f"https://steamcommunity.com/id/{h}",
-                    f"https://www.tiktok.com/@{h}",
-                ]
-            )
+            def first(style: str) -> str:
+                forms = shape_handle(h, style)
+                return path_seg(forms[0]) if forms else ""
+
+            gh, ig, tw, st, tt = first("github"), first("instagram"), first("x"), first("steam"), first("tiktok")
+            if gh:
+                urls.append(f"https://github.com/{gh}")
+            if ig:
+                urls.append(f"https://www.instagram.com/{ig}/")
+            if tw:
+                urls.extend([f"https://twitter.com/{tw}", f"https://x.com/{tw}"])
+            if st:
+                urls.append(f"https://steamcommunity.com/id/{st}")
+            if tt:
+                urls.append(f"https://www.tiktok.com/@{tt}")
         if seed.email:
             urls.append(f"https://gravatar.com/{email_local_part(seed.email)}")
         facts: list[Fact] = []

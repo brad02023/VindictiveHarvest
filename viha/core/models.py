@@ -77,6 +77,31 @@ class Fact:
         return (self.predicate, self.value.strip().lower())
 
 
+def is_lookup_fact(fact: Fact) -> bool:
+    extra = fact.extra or {}
+    if extra.get("lookup") or extra.get("kind") == "recipe":
+        return True
+    if fact.predicate == "recipe":
+        return True
+    if fact.source.publisher in {"Search recipe", "Public record portal", "Texas public record"}:
+        return True
+    return False
+
+
+def is_miss_fact(fact: Fact) -> bool:
+    extra = fact.extra or {}
+    return bool(extra.get("miss") or extra.get("kind") == "miss" or fact.predicate == "miss")
+
+
+def is_deferred_row(fact: Fact) -> bool:
+    """Lookups, 404s, and unconfirmed social (not green) stay behind SHOW MISSES."""
+    if is_lookup_fact(fact) or is_miss_fact(fact):
+        return True
+    if fact.section == "social" and (fact.candidate or fact.confidence < 0.7):
+        return True
+    return False
+
+
 @dataclass
 class Edge:
     a: str
@@ -122,10 +147,21 @@ class Case:
         return [f for f in self.facts if f.section == section]
 
     def visible_facts(self) -> list[Fact]:
-        return [f for f in self.facts if f.pinned or not f.candidate]
+        return [f for f in self.facts if not is_lookup_fact(f) and not is_miss_fact(f)]
 
     def candidates(self) -> list[Fact]:
         return [f for f in self.facts if f.candidate and not f.pinned]
+
+    def hit_facts(self) -> list[Fact]:
+        """Resolved findings, including unverified candidates. Lookups and 404s stay hidden."""
+        return self.visible_facts()
+
+    def display_facts(self) -> list[Fact]:
+        """GUI default rows: identity candidates stay; social is green confirmed only."""
+        return [f for f in self.facts if not is_deferred_row(f)]
+
+    def hidden_facts(self) -> list[Fact]:
+        return [f for f in self.facts if is_deferred_row(f)]
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from viha.core.identity import persona_brief
 from viha.core.models import Case, Fact
 
 
@@ -10,6 +11,7 @@ SECTIONS = [
     ("contact", "Contact"),
     ("social", "Social"),
     ("legal", "Legal"),
+    ("property", "Property"),
     ("business", "Business"),
     ("sanctions", "Watchlists"),
     ("infra", "Web & infra"),
@@ -30,13 +32,17 @@ def render_markdown(case: Case) -> str:
         "",
         "Public-source case file. Verify before use.",
         "",
+        "## Persona brief",
+        "",
+        persona_brief(case)["summary"],
+        "",
     ]
     if case.notes.strip():
         lines += ["## Notes", "", case.notes.strip(), ""]
     if case.tags:
         lines += [f"Tags: {', '.join(case.tags)}", ""]
     grouped: dict[str, list[Fact]] = defaultdict(list)
-    for fact in case.visible_facts():
+    for fact in case.display_facts():
         grouped[fact.section].append(fact)
 
     for key, label in SECTIONS:
@@ -53,11 +59,13 @@ def render_markdown(case: Case) -> str:
             )
         lines.append("")
 
-    cands = case.candidates()
-    if cands:
-        lines.append("## Candidates")
+    hidden = case.hidden_facts()
+    if hidden:
+        lines.append("## Misses and lookups")
         lines.append("")
-        for fact in cands:
+        lines.append("Not shown as hits. Open the URL to check manually.")
+        lines.append("")
+        for fact in hidden:
             lines.append(f"- {fact.predicate}: {fact.value} ({fact.source.publisher})")
         lines.append("")
 

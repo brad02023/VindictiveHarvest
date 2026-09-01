@@ -23,6 +23,15 @@ def build_edges(case: Case) -> list[Edge]:
             "certificate": "has_cert",
             "wayback": "archived",
             "photo": "pictured_as",
+            "age": "aged",
+            "dob": "born",
+            "location": "located_in",
+            "address": "addressed_at",
+            "charge": "charged_in",
+            "property": "property_record",
+            "employer": "employed_by",
+            "occupation": "works_as",
+            "gps": "seen_at",
         }.get(fact.predicate, f"has_{fact.predicate}")
         key = (persona, fact.value[:80], rel)
         if key in seen:

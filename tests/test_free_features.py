@@ -10,6 +10,8 @@ def test_recipes_include_name_and_tx_for_210():
     labels = [l for l, _, _ in recipe_links(seed)]
     assert any("Instagram" in l for l in labels)
     assert any("SOS" in l for l in labels)
+    assert any("docket" in l.lower() or "CourtListener" in l for l in labels)
+    assert any("mortgage" in l.lower() or "Property" in l or "UCC" in l for l in labels)
     assert any("email" in l.lower() or "Gravatar" in l for l in labels)
 
 
@@ -17,6 +19,15 @@ def test_reverse_image_links():
     links = reverse_image_links("https://example.com/p.jpg")
     assert len(links) >= 3
     assert all(u.startswith("http") for _, u in links)
+
+
+def test_recipes_shape_slash_username_per_site():
+    seed = Seed(username="rm -rf /my/brain")
+    urls = [u for _, u, _ in recipe_links(seed)]
+    assert any("steamcommunity.com/id/rm" in u and "%2F" not in u for u in urls)
+    assert any("github.com/rm-rf" in u for u in urls)
+    assert any("instagram.com/rm" in u and "%2F" not in u for u in urls)
+    assert not any("steamcommunity.com/id/rm -rf /my/brain" in u for u in urls)
 
 
 def test_expand_username_into_seed():
@@ -31,6 +42,20 @@ def test_expand_username_into_seed():
     )
     out = seed_from_fact(base, fact)
     assert "adalovelace" in out.username
+
+
+def test_expand_keeps_slash_in_typed_handle():
+    base = Seed()
+    fact = Fact(
+        predicate="username",
+        value="steam:rm -rf /my/brain",
+        section="social",
+        confidence=0.8,
+        source=Source(publisher="Steam", url="https://steamcommunity.com/id/x"),
+        extra={"handle": "rm -rf /my/brain"},
+    )
+    out = seed_from_fact(base, fact)
+    assert out.username == "rm -rf /my/brain"
 
 
 def test_edges_and_graphml():

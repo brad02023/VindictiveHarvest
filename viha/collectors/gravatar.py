@@ -50,6 +50,24 @@ class GravatarCollector(Collector):
                         raw=entry,
                     )
                 )
+            loc = ""
+            current = entry.get("currentLocation")
+            if isinstance(current, dict):
+                loc = (current.get("name") or current.get("title") or "").strip()
+            elif current:
+                loc = str(current).strip()
+            if loc:
+                facts.append(
+                    self.fact(
+                        predicate="location",
+                        value=loc,
+                        section="identity",
+                        confidence=0.68,
+                        url=entry.get("profileUrl") or f"https://gravatar.com/{digest}",
+                        publisher="Gravatar",
+                        extra={"via": "gravatar-profile"},
+                    )
+                )
             for account in entry.get("accounts") or []:
                 uname = account.get("username") or account.get("shortname") or ""
                 domain = account.get("domain") or account.get("name") or "account"

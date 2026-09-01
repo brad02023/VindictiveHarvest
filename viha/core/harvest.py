@@ -6,8 +6,10 @@ from collections.abc import Callable
 import httpx
 
 from viha.collectors.base import USER_AGENT, Collector
+from viha.collectors.people import fetch_discovered_people_pages
 from viha.collectors.registry import enabled_collectors
 from viha.core.edges import build_edges
+from viha.core.identity import corroborate_identity, ingest_mention_facts
 from viha.core.models import Case, Fact, Seed, Source, utc_now
 from viha.core.normalize import format_phone, normalize_email, normalize_name, normalize_phone
 
@@ -59,12 +61,25 @@ async def harvest_async(
 
         bundles = await asyncio.gather(*(run_one(c) for c in collectors))
 
-    for facts in bundles:
-        for fact in facts:
+        for facts in bundles:
+            for fact in facts:
+                stored = case.add_fact(fact)
+                if on_fact:
+                    on_fact(stored)
+
+        n = ingest_mention_facts(case)
+        if n:
+            log(f"Parsed {n} identity field(s) from indexed titles/snippets")
+        extra = await fetch_discovered_people_pages(case, client, log)
+        for fact in extra:
             stored = case.add_fact(fact)
             if on_fact:
                 on_fact(stored)
+        n2 = ingest_mention_facts(case)
+        if n2:
+            log(f"Parsed {n2} more identity field(s) after page fetch")
 
+    corroborate_identity(case)
     build_edges(case)
     log(f"Done. {len(case.facts)} facts, {len(case.edges)} edges, {len(case.errors)} collector errors.")
     return case
@@ -109,6 +124,17 @@ def _seed_facts(case: Case, seed: Seed) -> None:
                 predicate="org",
                 value=seed.org.strip(),
                 section="business",
+                confidence=1.0,
+                source=src,
+            )
+        )
+    place = ", ".join(p for p in (seed.city.strip(), (seed.state or "").strip().upper()) if p)
+    if place:
+        case.add_fact(
+            Fact(
+                predicate="location",
+                value=place,
+                section="identity",
                 confidence=1.0,
                 source=src,
             )

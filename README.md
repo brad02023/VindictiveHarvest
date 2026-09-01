@@ -18,7 +18,13 @@ python -m pip install -e ".[dev]"
 
 ## Run
 
-Desktop shortcut **VIHA** (created on install) or:
+Desktop shortcut **VIHA** (amber sickle / constellation icon). Recreate it with:
+
+```powershell
+powershell -File scripts\install-shortcut.ps1
+```
+
+Or:
 
 ```powershell
 python -m viha
@@ -49,6 +55,20 @@ VindictiveHarvest/
 ```
 
 Case files are written to `cases/` (gitignored).
+
+## Age, address, and people indexes
+
+DuckDuckGo HTML no longer returns people-search titles like `Owner …, Age 25 in …`. Bing still does. VIHA now:
+
+- Queries **Bing HTML** for quoted names, age/born, phone forms, and `site:` dorks (FastPeopleSearch, TruePeopleSearch, Intelius, ThatsThem). DuckDuckGo still runs the broader query set. **Google.com is not used** — it captchas bots; Bing `site:` is the dork engine.
+- Parses indexed titles/snippets for aka, age, `Born Month Year`, city, and streets.
+- **GETs viable result URLs** from those hits (people-index and a few official hosts). If the live page 403s or shows a challenge, it tries the Wayback Machine copy, then the same HTML parser as IMPORT PEOPLE HTML.
+- Direct collector GETs of FastPeopleSearch often **403**. The harvest follows reverse-phone listings into the `_id_G` profile page (JSON-LD: job, relatives, emails, addresses). If blocked, the persona sheet lists those URLs — save the **profile** HTML and **IMPORT PEOPLE HTML**. CLI: `python -m viha ingest-html saved.html --name "Full Name" --phone "5551234567"`.
+- Hits stay **candidates**. Two data-broker pages agreeing is not confirmation.
+- Does not fuzzy-match first names (`Brendon` ≠ `Brendan`). Phone digits in the title raise confidence.
+- Adds **Guadalupe CAD** portals for 210 / Cibolo / Schertz / Seguin, not only Bexar. Official owner and mortgage note are CAD/clerk records, not skip-trace pages.
+
+Spotify user URLs are probed as vanity paths. Instagram, Facebook, LinkedIn, and Discord stay login-walled; VIHA does not sign in.
 
 ## Legal
 

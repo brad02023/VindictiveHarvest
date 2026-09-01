@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QFont, QPalette
+from PySide6.QtGui import QColor, QFont, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
+
+from viha.data import DATA_DIR
+
+ICON_PATH = DATA_DIR / "viha.ico"
 
 BG = "#0B0D10"
 BG_RAISE = "#12151B"
@@ -51,6 +55,36 @@ QLabel#PersonaName {{
 }}
 QLabel#Muted {{
     color: {MUTED};
+}}
+QLabel#PersonaBrief {{
+    color: {BONE};
+    font-size: 14px;
+    background: transparent;
+    min-height: 36px;
+    padding: 4px 0 0 0;
+}}
+QLabel#PersonaKey {{
+    color: {MUTED};
+    font-size: 10px;
+    letter-spacing: 1px;
+    font-weight: 700;
+    background: transparent;
+}}
+QLabel#PersonaIndex {{
+    color: {BONE};
+    font-size: 12px;
+    background: transparent;
+}}
+QLabel#PersonaIndex a {{
+    color: {AMBER};
+}}
+QFrame#PersonaSheet {{
+    background: {BG_SUNKEN};
+    border: 1px solid {LINE};
+    border-radius: 4px;
+}}
+QFrame#PersonaSheet QLabel {{
+    background: transparent;
 }}
 QLineEdit, QPlainTextEdit, QTextEdit {{
     background: {BG_SUNKEN};
@@ -158,8 +192,17 @@ QGraphicsView {{
 """
 
 
+def app_icon() -> QIcon:
+    if ICON_PATH.exists():
+        return QIcon(str(ICON_PATH))
+    return QIcon()
+
+
 def apply_theme(app: QApplication) -> None:
     app.setStyle("Fusion")
+    icon = app_icon()
+    if not icon.isNull():
+        app.setWindowIcon(icon)
     pal = QPalette()
     pal.setColor(QPalette.ColorRole.Window, QColor(BG))
     pal.setColor(QPalette.ColorRole.WindowText, QColor(BONE))

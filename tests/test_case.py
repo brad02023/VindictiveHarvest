@@ -43,3 +43,4 @@ def test_markdown_export_includes_persona():
     assert "Test Person" in md
     assert "t@example.com" in md
     assert "Contact" in md
+    assert "Persona brief" in md

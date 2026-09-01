@@ -18,7 +18,9 @@ def seed_from_fact(base: Seed, fact: Fact) -> Seed:
         seed.org = value.split("·")[0].strip()
     elif fact.predicate in {"username", "social_mention"} or handle:
         raw = handle or value.split(":")[-1]
-        raw = raw.split("/")[-1].lstrip("@")
+        if "://" in raw:
+            raw = raw.rstrip("/").split("/")[-1]
+        raw = raw.lstrip("@")
         existing = split_usernames(seed.username)
         if raw and raw.lower() not in existing:
             existing.append(raw)

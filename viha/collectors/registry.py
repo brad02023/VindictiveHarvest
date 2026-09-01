@@ -11,6 +11,7 @@ from viha.collectors.gravatar import GravatarCollector
 from viha.collectors.infra import InfraCollector
 from viha.collectors.opencorporates import OpenCorporatesCollector
 from viha.collectors.opensanctions import OpenSanctionsCollector
+from viha.collectors.people import PeopleIndexCollector
 from viha.collectors.recipes import RecipeCollector
 from viha.collectors.search import WebSearchCollector
 from viha.collectors.social import SocialHuntCollector
@@ -28,6 +29,7 @@ COLLECTORS: list[Collector] = [
     GitHubCollector(),
     GravatarCollector(),
     WebSearchCollector(),
+    PeopleIndexCollector(),
     CourtListenerCollector(),
     EdgarCollector(),
     FecCollector(),

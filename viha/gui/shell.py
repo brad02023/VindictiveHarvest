@@ -28,14 +28,16 @@ from viha import __app_name__, __app_short__, __version__
 from viha.collectors.registry import COLLECTORS
 from viha.core.casefile import save_case
 from viha.core.diff import diff_summary
+from viha.core.edges import build_edges
 from viha.core.exifutil import read_jpeg_exif
 from viha.core.expand import seed_from_fact
+from viha.core.identity import corroborate_identity
 from viha.core.models import Case, Fact, Seed, Source, utc_now
+from viha.core.people_html import facts_from_people_html
 from viha.core.recipes import reverse_image_links
 from viha.export.case_md import render_markdown
 from viha.export.graphml import render_graphml
 from viha.gui.settings_dialog import SettingsDialog
-from viha.gui.views.constellation import ConstellationView
 from viha.gui.views.persona import PersonaView
 from viha.gui.worker import HarvestWorker
 
@@ -85,6 +87,7 @@ class MainWindow(QMainWindow):
         for label, slot in (
             ("SETTINGS", self._settings),
             ("IMAGE / EXIF", self._load_image),
+            ("IMPORT PEOPLE HTML", self._import_people_html),
             ("EXPORT MD", self._export_md),
             ("EXPORT GRAPHML", self._export_graphml),
         ):
@@ -116,7 +119,7 @@ class MainWindow(QMainWindow):
         self.org = QLineEdit()
         self.org.setPlaceholderText("Company / org / domain")
         self.username = QLineEdit()
-        self.username.setPlaceholderText("Known usernames, comma-separated")
+        self.username.setPlaceholderText('Known usernames — comma-separated; quote names with spaces, e.g. "rm -rf /my/brain"')
         for w in (self.name, self.phone, self.email, self.city, self.state, self.org, self.username):
             col.addWidget(w)
 
@@ -152,15 +155,12 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.persona = PersonaView()
         self.persona.bind_select(self._show_fact)
-        self.constellation = ConstellationView()
-        self.constellation.node_clicked.connect(self._from_graph)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.notes = QPlainTextEdit()
         self.notes.setPlaceholderText("Case notes (saved with the .viha file).")
         self.notes.textChanged.connect(self._persist_notes)
         self.tabs.addTab(self.persona, "PERSONA")
-        self.tabs.addTab(self.constellation, "CONSTELLATION")
         self.tabs.addTab(self.notes, "NOTES")
         self.tabs.addTab(self.log, "LOG")
         return self.tabs
@@ -230,7 +230,6 @@ class MainWindow(QMainWindow):
         self.case = case
         save_case(case)
         self.persona.render(case)
-        self.constellation.render(case)
         self.notes.blockSignals(True)
         self.notes.setPlainText(case.notes)
         self.notes.blockSignals(False)
@@ -276,13 +275,6 @@ class MainWindow(QMainWindow):
                 ]
             )
         )
-
-    def _from_graph(self, label: str) -> None:
-        if not self.case:
-            return
-        fact = next((f for f in self.case.facts if f.value[:42] == label or f.value[:80] == label), None)
-        if fact:
-            self._show_fact(fact)
 
     def _open_source(self) -> None:
         if not self._selected_fact:
@@ -347,9 +339,57 @@ class MainWindow(QMainWindow):
             Fact(predicate="photo", value=path, section="identity", confidence=1.0, source=src, raw=str(meta))
         )
         self.persona.render(self.case)
-        self.constellation.render(self.case)
         self.detail.setPlainText("EXIF\n" + "\n".join(f"{k}: {v}" for k, v in meta.items()))
         self.statusBar().showMessage(f"EXIF loaded from {path}")
+
+    def _import_people_html(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Saved people-index HTML",
+            str(Path.home()),
+            "HTML (*.html *.htm);;All files (*.*)",
+        )
+        if not path:
+            return
+        html = Path(path).read_text(encoding="utf-8", errors="replace")
+        seed = self._seed()
+        if seed.is_empty() and not self.case:
+            QMessageBox.information(self, __app_short__, "Enter a name or phone so the page can be matched.")
+            return
+        if self.case:
+            seed = Seed(
+                full_name=seed.full_name or self.case.seed.full_name,
+                phone=seed.phone or self.case.seed.phone,
+                email=seed.email or self.case.seed.email,
+                city=seed.city or self.case.seed.city,
+                state=seed.state or self.case.seed.state,
+                org=seed.org or self.case.seed.org,
+                username=seed.username or self.case.seed.username,
+            )
+        facts = facts_from_people_html(
+            html,
+            seed,
+            collector="viha.db.people",
+            imported=True,
+        )
+        if not facts:
+            QMessageBox.information(
+                self,
+                __app_short__,
+                "No matching name/phone facts on that page. Check the seed name matches the listing.",
+            )
+            return
+        if not self.case:
+            self.case = Case(title=f"Harvest — {seed.display_name()}", seed=seed)
+        for fact in facts:
+            self.case.add_fact(fact)
+        corroborate_identity(self.case)
+        build_edges(self.case)
+        save_case(self.case)
+        self.persona.render(self.case)
+        self.log.appendPlainText(f"Imported {len(facts)} facts from {path}")
+        self.tabs.setCurrentWidget(self.persona)
+        self.statusBar().showMessage(f"Imported {len(facts)} people-index facts")
 
     def _persist_notes(self) -> None:
         if self.case:

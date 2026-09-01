@@ -41,6 +41,22 @@ class OpenCorporatesCollector(Collector):
                         candidate=True,
                     )
                 )
+                addr = officer.get("address") or ""
+                if isinstance(addr, dict):
+                    addr = addr.get("in_full") or addr.get("street_address") or ""
+                if addr:
+                    facts.append(
+                        self.fact(
+                            predicate="address",
+                            value=str(addr).strip(),
+                            section="identity",
+                            confidence=0.48,
+                            url=url,
+                            publisher="OpenCorporates",
+                            extra={"via": "officer"},
+                            candidate=True,
+                        )
+                    )
         except Exception as exc:
             if "401" in str(exc):
                 log("OpenCorporates officers need OPENCORPORATES_API_TOKEN — skipped")
@@ -73,6 +89,24 @@ class OpenCorporatesCollector(Collector):
                         candidate=True,
                     )
                 )
+                registered = company.get("registered_address_in_full") or ""
+                if not registered:
+                    raw_addr = company.get("registered_address") or {}
+                    if isinstance(raw_addr, dict):
+                        registered = raw_addr.get("in_full") or raw_addr.get("street_address") or ""
+                if registered:
+                    facts.append(
+                        self.fact(
+                            predicate="address",
+                            value=str(registered).strip(),
+                            section="property",
+                            confidence=0.46,
+                            url=url,
+                            publisher="OpenCorporates",
+                            extra={"via": "registered-office"},
+                            candidate=True,
+                        )
+                    )
         except Exception as exc:
             if "401" in str(exc):
                 log("OpenCorporates companies need OPENCORPORATES_API_TOKEN — skipped")

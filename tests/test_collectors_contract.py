@@ -29,5 +29,6 @@ def test_expected_databases_registered():
         "viha.db.subdomains",
         "viha.db.texas",
         "viha.db.employees",
+        "viha.db.people",
     ):
         assert needed in ids

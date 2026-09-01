@@ -51,6 +51,32 @@ class OpenSanctionsCollector(Collector):
                     candidate=score < 70,
                 )
             )
+            props = hit.get("properties") or {}
+            if isinstance(props, dict) and schema.lower() in {"person", "legalentity"}:
+                for pred, keys in (
+                    ("dob", ("birthDate", "incorporationDate")),
+                    ("location", ("birthPlace", "country", "nationality")),
+                    ("address", ("address",)),
+                ):
+                    for key in keys:
+                        vals = props.get(key) or []
+                        if isinstance(vals, str):
+                            vals = [vals]
+                        if not vals:
+                            continue
+                        facts.append(
+                            self.fact(
+                                predicate=pred,
+                                value=str(vals[0]),
+                                section="identity",
+                                confidence=min(0.8, 0.4 + score / 100),
+                                url=url,
+                                publisher="OpenSanctions",
+                                extra={"via": key, "schema": schema},
+                                candidate=score < 70,
+                            )
+                        )
+                        break
         if not facts:
             log("OpenSanctions: no watchlist hits")
         return facts

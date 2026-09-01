@@ -12,13 +12,28 @@ from viha.collectors.social_catalog import (
     platform_of,
 )
 from viha.core.models import Fact, Seed
-from viha.core.normalize import email_local_part, name_tokens, split_usernames, username_candidates
+from viha.core.identity import fields_from_github_user
+from viha.core.handles import STYLES, path_seg, probe_urls, shape_handle
+from viha.core.persona_search import SEARCHERS, merge_persona_targets, platform_key, search_personas
+from viha.core.normalize import (
+    email_local_part,
+    is_simple_handle,
+    name_tokens,
+    split_usernames,
+    username_candidates,
+)
 
 
 def handle_is_strong(handle: str, seed: Seed) -> bool:
-    raw = (handle or "").strip().lower().split(".")[0]
+    raw = (handle or "").strip().lower()
     supplied = {h.lower() for h in split_usernames(seed.username)}
     if raw in supplied:
+        return True
+    for supplied_handle in supplied:
+        for style in STYLES:
+            if raw in shape_handle(supplied_handle, style):
+                return True
+    if " " not in raw and "/" not in raw and raw.split(".")[0] in supplied:
         return True
     local = email_local_part(seed.email)
     if local and raw == local and (any(ch.isdigit() for ch in local) or len(local) >= 10):
@@ -26,32 +41,52 @@ def handle_is_strong(handle: str, seed: Seed) -> bool:
     return False
 
 
+def _is_social_profile(fact: Fact) -> bool:
+    if fact.section != "social" or fact.predicate != "username":
+        return False
+    extra = fact.extra or {}
+    return not bool(extra.get("miss") or extra.get("kind") == "miss")
+
+
 def mark_social_confidence(facts: list[Fact], seed: Seed) -> list[Fact]:
     for fact in facts:
+        if fact.extra.get("miss") or fact.predicate == "miss":
+            fact.candidate = True
+            continue
+        if not _is_social_profile(fact):
+            continue
         handle = (fact.extra or {}).get("handle") or fact.value.split(":", 1)[-1]
         if fact.extra.get("via") == "link-in-bio":
             fact.candidate = False
             fact.confidence = max(fact.confidence, 0.72)
             continue
+        if fact.extra.get("via") == "persona-search":
+            fact.candidate = False
+            fact.confidence = max(fact.confidence, 0.76)
+            continue
         if fact.extra.get("via") == "site-search":
             continue
         if handle_is_strong(str(handle), seed):
             fact.candidate = False
+            fact.confidence = max(fact.confidence, 0.72)
             continue
         fact.candidate = True
         fact.confidence = min(fact.confidence, 0.48)
 
-    by_plat: dict[str, list[Fact]] = {}
+    by_handle: dict[tuple[str, str], list[Fact]] = {}
     for fact in facts:
-        plat = str((fact.extra or {}).get("platform") or fact.publisher).lower()
-        by_plat.setdefault(plat, []).append(fact)
-    for group in by_plat.values():
-        confirmed = [f for f in group if not f.candidate]
-        if len(confirmed) > 1:
-            confirmed.sort(key=lambda f: f.confidence, reverse=True)
-            for extra in confirmed[1:]:
-                extra.candidate = True
-                extra.confidence = min(extra.confidence, 0.45)
+        if not _is_social_profile(fact) or fact.candidate:
+            continue
+        plat = str((fact.extra or {}).get("platform") or fact.source.publisher).lower()
+        handle = str((fact.extra or {}).get("handle") or fact.value.split(":", 1)[-1]).lower()
+        by_handle.setdefault((plat, handle), []).append(fact)
+    for group in by_handle.values():
+        if len(group) <= 1:
+            continue
+        group.sort(key=lambda f: f.confidence, reverse=True)
+        for extra in group[1:]:
+            extra.candidate = True
+            extra.confidence = min(extra.confidence, 0.45)
     return facts
 
 
@@ -69,7 +104,7 @@ def hunt_handles(seed: Seed) -> list[str]:
         firstlast = f"{tokens[0]}{tokens[-1]}"
         if firstlast not in handles:
             handles.append(firstlast)
-    return handles[:10]
+    return handles[:24]
 
 
 class SocialHuntCollector(Collector):
@@ -92,62 +127,105 @@ class SocialHuntCollector(Collector):
         async def probe(handle: str, site: dict) -> list[Fact]:
             if handle not in strong and site.get("name") not in HIGH_SIGNAL:
                 return []
-            url = site["url"].replace("{u}", handle)
-            async with sem:
-                try:
-                    r = await client.get(
-                        url,
-                        headers=headers,
-                        timeout=12.0,
-                        follow_redirects=True,
-                    )
-                except Exception as exc:
-                    log(f"Social {site['name']}/{handle}: {exc}")
-                    return []
-            body = r.text or ""
-            if not page_is_hit(site, r.status_code, body, handle, str(r.url)):
+            targets = probe_urls(site, handle)
+            found: list[tuple[str, str]] = []
+            if handle in strong and platform_key(site.get("name") or "") in SEARCHERS:
+                async with sem:
+                    found = await search_personas(client, site.get("name") or "", handle)
+            search_urls = {u.rstrip("/") for _, u in found}
+            targets = merge_persona_targets(targets, found, handle)
+            if not targets:
                 return []
             plat = (site["name"] or "").lower().replace(".", "").replace(" ", "")
-            facts = [
-                self.fact(
-                    predicate="username",
-                    value=f"{plat}:{handle}",
-                    section="social",
-                    confidence=0.74,
-                    url=str(r.url) or url,
-                    publisher=site["name"],
-                    extra={"platform": plat, "handle": handle},
-                )
-            ]
-            if site.get("parse_links"):
-                for linked_plat, href in extract_social_links(body):
-                    facts.append(
-                        self.fact(
-                            predicate="username",
-                            value=f"{linked_plat}:{href}",
-                            section="social",
-                            confidence=0.76,
-                            url=href,
-                            publisher=linked_plat,
-                            extra={
-                                "platform": linked_plat,
-                                "handle": handle,
-                                "via": "link-in-bio",
-                                "from": site["name"],
-                            },
+            for shaped, url in targets:
+                async with sem:
+                    try:
+                        r = await client.get(
+                            url,
+                            headers=headers,
+                            timeout=12.0,
+                            follow_redirects=True,
                         )
+                    except Exception as exc:
+                        log(f"Social {site['name']}/{shaped}: {exc}")
+                        continue
+                body = r.text or ""
+                from_search = (url or "").rstrip("/") in search_urls or str(r.url).rstrip("/") in search_urls
+                check_handle = handle if from_search else shaped
+                if not page_is_hit(
+                    site,
+                    r.status_code,
+                    body,
+                    check_handle,
+                    str(r.url),
+                    requested_url=url,
+                ):
+                    continue
+                extra = {"platform": plat, "handle": check_handle, "supplied": handle}
+                if from_search:
+                    extra["via"] = "persona-search"
+                facts = [
+                    self.fact(
+                        predicate="username",
+                        value=f"{plat}:{check_handle}",
+                        section="social",
+                        confidence=0.78 if from_search else 0.74,
+                        url=str(r.url) or url,
+                        publisher=site["name"],
+                        extra=extra,
                     )
-            return facts
+                ]
+                if site.get("parse_links"):
+                    for linked_plat, href in extract_social_links(body):
+                        facts.append(
+                            self.fact(
+                                predicate="username",
+                                value=f"{linked_plat}:{href}",
+                                section="social",
+                                confidence=0.76,
+                                url=href,
+                                publisher=linked_plat,
+                                extra={
+                                    "platform": linked_plat,
+                                    "handle": check_handle,
+                                    "via": "link-in-bio",
+                                    "from": site["name"],
+                                },
+                            )
+                        )
+                return facts
+            if handle in strong and targets:
+                _, miss_url = targets[0]
+                return [
+                    self.fact(
+                        predicate="miss",
+                        value=f"{site['name']}: {handle}",
+                        section="social",
+                        confidence=0.1,
+                        url=miss_url,
+                        publisher=site["name"],
+                        extra={
+                            "platform": plat,
+                            "handle": handle,
+                            "miss": True,
+                            "kind": "miss",
+                        },
+                        candidate=True,
+                    )
+                ]
+            return []
 
         tasks = [probe(handle, site) for handle in handles for site in sites]
-        tasks.extend(
-            [
-                self._reddit_api(client, handle, sem)
-                for handle in handles
-            ]
-        )
-        tasks.extend([self._github_api(client, handle, sem) for handle in handles])
-        tasks.extend([self._bluesky_api(client, handle, sem) for handle in handles])
+        api_github = []
+        api_reddit = []
+        api_bsky = []
+        for handle in handles:
+            api_github.extend(shape_handle(handle, "github"))
+            api_reddit.extend(shape_handle(handle, "reddit"))
+            api_bsky.extend(shape_handle(handle, "generic"))
+        tasks.extend([self._reddit_api(client, h, sem) for h in dict.fromkeys(api_reddit)])
+        tasks.extend([self._github_api(client, h, sem) for h in dict.fromkeys(api_github)])
+        tasks.extend([self._bluesky_api(client, h, sem) for h in dict.fromkeys(api_bsky) if is_simple_handle(h)])
 
         bundles = await asyncio.gather(*tasks)
         facts: list[Fact] = []
@@ -160,20 +238,22 @@ class SocialHuntCollector(Collector):
                 seen.add(key)
                 facts.append(fact)
         facts = mark_social_confidence(facts, seed)
-        confirmed = sum(1 for f in facts if not f.candidate)
-        if not facts:
+        hits = [f for f in facts if f.predicate != "miss" and not f.extra.get("miss")]
+        confirmed = sum(1 for f in hits if not f.candidate)
+        misses = len(facts) - len(hits)
+        if not hits and not misses:
             log("Social hunt: no public profiles found")
         else:
             log(
-                f"Social hunt: {len(facts)} profiles "
-                f"({confirmed} confirmed, {len(facts) - confirmed} candidates)"
+                f"Social hunt: {len(hits)} profiles "
+                f"({confirmed} confirmed, {len(hits) - confirmed} candidates, {misses} misses hidden)"
             )
         return facts
 
     async def _reddit_api(self, client, handle: str, sem) -> list[Fact]:
         async with sem:
             r = await client.get(
-                f"https://www.reddit.com/user/{handle}/about.json",
+                f"https://www.reddit.com/user/{path_seg(handle)}/about.json",
                 headers={"User-Agent": "VIHA/0.1 local-research"},
                 timeout=10.0,
             )
@@ -201,7 +281,7 @@ class SocialHuntCollector(Collector):
 
     async def _github_api(self, client, handle: str, sem) -> list[Fact]:
         async with sem:
-            r = await client.get(f"https://api.github.com/users/{handle}", timeout=10.0)
+            r = await client.get(f"https://api.github.com/users/{path_seg(handle)}", timeout=10.0)
         if r.status_code != 200:
             return []
         try:
@@ -209,18 +289,31 @@ class SocialHuntCollector(Collector):
         except Exception:
             return []
         login = user.get("login") or handle
+        profile_url = user.get("html_url") or f"https://github.com/{login}"
         facts = [
             self.fact(
                 predicate="username",
                 value=f"github:{login}",
                 section="social",
                 confidence=0.86,
-                url=user.get("html_url") or f"https://github.com/{login}",
+                url=profile_url,
                 publisher="GitHub",
                 raw=user,
                 extra={"platform": "github", "handle": login},
             )
         ]
+        for field in fields_from_github_user(user):
+            facts.append(
+                self.fact(
+                    predicate=field["predicate"],
+                    value=field["value"],
+                    section=field["section"],
+                    confidence=0.7,
+                    url=profile_url,
+                    publisher="GitHub",
+                    extra={"handle": login, "via": "github-profile"},
+                )
+            )
         if user.get("blog"):
             blog = str(user["blog"])
             if not blog.startswith("http"):
