@@ -1,12 +1,18 @@
 Set-Location (Split-Path -Parent $PSScriptRoot)
-$pythonw = Join-Path $env:LOCALAPPDATA "Programs\Python\Python314\pythonw.exe"
+$root = Get-Location
+$pythonw = Join-Path $root ".venv\Scripts\pythonw.exe"
 if (-not (Test-Path $pythonw)) {
-    $pythonw = (Get-Command pythonw -ErrorAction SilentlyContinue).Source
+    $pythonw = Join-Path $root ".venv\Scripts\python.exe"
+}
+if (-not (Test-Path $pythonw)) {
+    $cmd = Get-Command pythonw -ErrorAction SilentlyContinue
+    if ($cmd) { $pythonw = $cmd.Source }
+}
+if (-not $pythonw -or -not (Test-Path $pythonw)) {
+    $cmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($cmd) { $pythonw = $cmd.Source }
 }
 if (-not $pythonw) {
-    $pythonw = (Get-Command python -ErrorAction SilentlyContinue).Source
+    throw "Python not found. Double-click install.bat first (needs Python 3.10+)."
 }
-if (-not $pythonw) {
-    throw "Python not found. Install Python 3.11+ and re-run."
-}
-Start-Process -FilePath $pythonw -ArgumentList "-m","viha" -WorkingDirectory (Get-Location)
+Start-Process -FilePath $pythonw -ArgumentList "-m","viha" -WorkingDirectory $root

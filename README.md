@@ -7,14 +7,23 @@ It does not log into accounts, bypass CAPTCHAs, or pull non-public records.
 ## Requirements
 
 - Windows, macOS, or Linux
-- Python 3.11+
+- Python 3.10 or newer
 
 ## Install
 
+**Windows:** double-click `install.bat`. That creates a local `.venv`, installs every dependency, and adds a desktop shortcut.
+
+If you already have Python 3.10+:
+
 ```powershell
 cd VindictiveHarvest
-python -m pip install -e ".[dev]"
+python -m pip install -e .
+python -m viha
 ```
+
+`python -m viha` also installs missing packages (`httpx`, `PySide6`) the first time it runs.
+
+The GitHub zip unpacks as `VindictiveHarvest-main`. Run `install.bat` from that folder (the one that contains `pyproject.toml`).
 
 ## Run
 

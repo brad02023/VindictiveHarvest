@@ -7,13 +7,13 @@ name = "viha"
 version = "0.1.0"
 description = "Vindictive Harvest — local public-source OSINT workbench"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 keywords = ["osint", "public-records", "investigation"]
 authors = [{ name = "VIHA" }]
 dependencies = [
     "httpx>=0.27",
-    "PySide6>=6.7",
+    "PySide6>=6.6",
 ]
 
 [project.optional-dependencies]

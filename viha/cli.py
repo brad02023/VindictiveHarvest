@@ -46,8 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd is None:
+        from viha import claim_windows_app_id
         from viha.app import run_app
 
+        claim_windows_app_id()
         return run_app()
 
     if args.cmd == "reap":
